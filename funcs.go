@@ -6,11 +6,62 @@ import (
 	"github.com/gabriel-vasile/mimetype"
 	"github.com/google/uuid"
 	"image"
+	"image/png"
 	"io"
 	"os"
 	"path/filepath"
-	"strings"
 )
+
+// detail fetch image details (size, resolutions etc.)
+func (i *Himage) detail() *Himage {
+	if i.moved {
+		i.inDetail()
+		return i
+	}
+
+	if i.path != "" {
+		i.inDetail()
+	} else if i.Multipart != nil {
+		f, err := i.Multipart.Open()
+		if err != nil {
+			i.Error = err
+			return i
+		}
+		defer f.Close()
+		mime, _ := mimetype.DetectReader(f)
+		i.Detail.Mime = mime.String()
+
+		c, _, err := image.DecodeConfig(f)
+		if err != nil {
+			i.Error = err
+			return i
+		}
+		i.Detail.Width = c.Width
+		i.Detail.Height = c.Height
+
+	} else if i.File != nil {
+		stat, err := i.File.Stat()
+		if err != nil {
+			i.Error = err
+			return i
+		}
+		i.Detail.Size = stat.Size()
+
+		mime, _ := mimetype.DetectReader(i.File)
+		i.Detail.Mime = mime.String()
+
+		i.File.Seek(0, 0)
+		c, _, err := image.DecodeConfig(i.File)
+		if err != nil {
+			i.Error = err
+			return i
+		}
+		i.Detail.Width = c.Width
+		i.Detail.Height = c.Height
+	}
+
+	return i
+}
 
 // inDetail ..
 func (i *Himage) inDetail() *Himage {
@@ -27,6 +78,7 @@ func (i *Himage) inDetail() *Himage {
 	}
 	i.Detail.Size = stat.Size()
 
+	i.File.Seek(0, 0)
 	c, _, err := image.DecodeConfig(f)
 	if err != nil {
 		i.Error = err
@@ -35,7 +87,7 @@ func (i *Himage) inDetail() *Himage {
 	i.Detail.Width = c.Width
 	i.Detail.Height = c.Height
 
-	mime, err := mimetype.DetectReader(f)
+	mime, err := mimetype.DetectFile(i.path)
 	if err != nil {
 		i.Error = err
 		return i
@@ -49,19 +101,30 @@ func (i *Himage) makeTemp() *Himage {
 	if i.Error != nil {
 		return i
 	}
-	ext := strings.Split(i.Detail.Mime, "/")[0]
+	//ext := strings.Split(i.Detail.Mime, "/")[0]*/
 
 	name := uuid.New().String()
 	if i.dst == "" && i.name != "" {
 		name = i.name
 	}
 
-	i.tempPath = filepath.Join(os.TempDir(), fmt.Sprintf("%s.%s", name, ext))
+	i.tempPath = filepath.Join(os.TempDir(), fmt.Sprintf("%s.jpg", name))
 	_, err := os.Create(string(os.PathSeparator) + i.tempPath)
 	if err != nil {
 		i.Error = err
 		return i
 	}
+
+	return i
+}
+
+func (i *Himage) makeQuality() *Himage {
+	i.quality = make(map[string]interface{})
+	i.quality["jpg"] = 100
+	i.quality["jpeg"] = 100
+	i.qJPEG = 100
+	i.quality["png"] = png.DefaultCompression
+	i.qPNG = png.DefaultCompression
 
 	return i
 }
@@ -89,6 +152,7 @@ func (i *Himage) moveToTemp() *Himage {
 			return i
 		}
 		defer f.Close()
+		f.Seek(0, 0)
 		_, err = io.Copy(d, f)
 		if err != nil {
 			i.Error = err
@@ -100,7 +164,7 @@ func (i *Himage) moveToTemp() *Himage {
 			i.Error = err
 			return i
 		}
-
+		f.Seek(0, 0)
 		if i.Detail.Size <= int64(CHUNK_SIZE) {
 			if err := i.bytesCopy(int64(CHUNK_SIZE), f, d); err != nil {
 				i.Error = err
@@ -113,6 +177,7 @@ func (i *Himage) moveToTemp() *Himage {
 			return i
 		}
 	} else if i.File != nil {
+		i.File.Seek(0, 0)
 		if i.Detail.Size <= int64(CHUNK_SIZE) {
 			if err := i.bytesCopy(int64(CHUNK_SIZE), i.File, d); err != nil {
 				i.Error = err
