@@ -3,7 +3,6 @@ package himage
 import (
 	"errors"
 	"github.com/disintegration/imaging"
-	"github.com/gabriel-vasile/mimetype"
 	"image"
 	_ "image/gif"
 	_ "image/jpeg"
@@ -94,66 +93,6 @@ func (i *Himage) SetQuality(q interface{}) *Himage {
 		i.qPNG = q.(png.CompressionLevel)
 		break
 	}
-	return i
-}
-
-func (i *Himage) makeQuality() *Himage {
-	i.quality = make(map[string]interface{})
-	i.quality["jpg"] = 100
-	i.quality["jpeg"] = 100
-	i.qJPEG = 100
-	i.quality["png"] = png.DefaultCompression
-	i.qPNG = png.DefaultCompression
-
-	return i
-}
-
-// detail fetch image details (size, resolutions etc.)
-func (i *Himage) detail() *Himage {
-	if i.moved {
-		i.inDetail()
-		return i
-	}
-
-	if i.path != "" {
-		i.inDetail()
-	} else if i.Multipart != nil {
-		f, err := i.Multipart.Open()
-		if err != nil {
-			i.Error = err
-			return i
-		}
-		defer f.Close()
-		mime, _ := mimetype.DetectReader(f)
-		i.Detail.Mime = mime.String()
-
-		c, _, err := image.DecodeConfig(f)
-		if err != nil {
-			i.Error = err
-			return i
-		}
-		i.Detail.Width = c.Width
-		i.Detail.Height = c.Height
-
-	} else if i.File != nil {
-		stat, err := i.File.Stat()
-		if err != nil {
-			i.Error = err
-			return i
-		}
-		i.Detail.Size = stat.Size()
-
-		mime, _ := mimetype.DetectReader(i.File)
-		i.Detail.Mime = mime.String()
-		c, _, err := image.DecodeConfig(i.File)
-		if err != nil {
-			i.Error = err
-			return i
-		}
-		i.Detail.Width = c.Width
-		i.Detail.Height = c.Height
-	}
-
 	return i
 }
 
