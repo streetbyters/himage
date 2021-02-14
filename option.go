@@ -22,6 +22,7 @@ const (
 	BottomRight
 )
 
+// Resize ..
 type Resize struct {
 	Anchor         Anchor
 	Ratio          int
@@ -33,6 +34,7 @@ type Resize struct {
 	Minimize       bool
 }
 
+// Valid ..
 func (r Resize) Valid() error {
 	if (r.Ratio > 0 && r.Width > 0) || (r.Ratio > 0 && r.Height > 0) {
 		return errors.New("both ratio and resolution cannot be specified at the same time")

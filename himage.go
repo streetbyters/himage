@@ -4,10 +4,7 @@ import (
 	"errors"
 	"github.com/disintegration/imaging"
 	"image"
-	_ "image/gif"
-	_ "image/jpeg"
 	"image/png"
-	_ "image/png"
 	"mime/multipart"
 	"os"
 )
@@ -64,11 +61,13 @@ func NewHimageWithFile(f *os.File) *Himage {
 	return i
 }
 
+// SetName ..
 func (i *Himage) SetName(name string) *Himage {
 	i.name = name
 	return i
 }
 
+// RemoveOrigin ..
 func (i *Himage) RemoveOrigin(val bool) *Himage {
 	i.removeOrigin = val
 	return i
@@ -174,6 +173,7 @@ func (i *Himage) Resize(option Resize) *Himage {
 	return i
 }
 
+// Run ..
 func (i *Himage) Run() (*Himage, error) {
 	if i.tempPath != "" {
 		defer os.Remove(i.tempPath)
