@@ -12,7 +12,6 @@ jobs:
     working_directory: /go/src/github.com/streetbyters/himage
     steps:
       - checkout
-      - run: go get -v -t -d ./...
       - run: go mod tidy
       - run: go test -v -coverprofile=coverage.txt -covermode=atomic ./...
       - run: bash <(curl -s https://codecov.io/bash)
