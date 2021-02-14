@@ -1,9 +1,9 @@
 package himage
 
 import (
-	"fmt"
+	"errors"
+	"github.com/disintegration/imaging"
 	"github.com/gabriel-vasile/mimetype"
-	"github.com/google/uuid"
 	"image"
 	_ "image/gif"
 	_ "image/jpeg"
@@ -11,13 +11,10 @@ import (
 	_ "image/png"
 	"mime/multipart"
 	"os"
-	"path/filepath"
-	"strings"
 )
 
 // Himage ..
 type Himage struct {
-	Path      string
 	Multipart *multipart.FileHeader
 	File      *os.File
 	Error     error
@@ -27,18 +24,24 @@ type Himage struct {
 		Mime   string
 		Size   int64
 	}
-	dst      string
-	quality  map[string]interface{}
-	qJPEG    int
-	qPNG     png.CompressionLevel
-	moved    bool
-	tempPath string
+	path         string
+	dst          string
+	quality      map[string]interface{}
+	qJPEG        int
+	qPNG         png.CompressionLevel
+	moved        bool
+	resized      bool
+	optimized    bool
+	tempPath     string
+	name         string
+	removeOrigin bool
 }
 
 // NewHimageWithPath ..
 func NewHimageWithPath(p string) *Himage {
 	i := new(Himage)
-	i.Path = p
+	i.path = p
+	i.removeOrigin = false
 	i.detail().makeQuality()
 
 	return i
@@ -48,8 +51,8 @@ func NewHimageWithPath(p string) *Himage {
 func NewHimageWithMultipart(f *multipart.FileHeader) *Himage {
 	i := new(Himage)
 	i.Multipart = f
+	i.removeOrigin = false
 	i.detail().makeQuality()
-
 	return i
 }
 
@@ -57,8 +60,18 @@ func NewHimageWithMultipart(f *multipart.FileHeader) *Himage {
 func NewHimageWithFile(f *os.File) *Himage {
 	i := new(Himage)
 	i.File = f
-	i.detail()
+	i.removeOrigin = false
+	i.detail().makeQuality()
+	return i
+}
 
+func (i *Himage) SetName(name string) *Himage {
+	i.name = name
+	return i
+}
+
+func (i *Himage) RemoveOrigin(val bool) *Himage {
+	i.removeOrigin = val
 	return i
 }
 
@@ -74,9 +87,11 @@ func (i *Himage) SetQuality(q interface{}) *Himage {
 	case "image/jpg", "image/jpeg":
 		i.quality["jpg"] = q.(int)
 		i.quality["jpeg"] = q.(int)
+		i.qJPEG = q.(int)
 		break
 	case "image/png":
 		i.quality["png"] = q.(png.CompressionLevel)
+		i.qPNG = q.(png.CompressionLevel)
 		break
 	}
 	return i
@@ -86,7 +101,9 @@ func (i *Himage) makeQuality() *Himage {
 	i.quality = make(map[string]interface{})
 	i.quality["jpg"] = 100
 	i.quality["jpeg"] = 100
+	i.qJPEG = 100
 	i.quality["png"] = png.DefaultCompression
+	i.qPNG = png.DefaultCompression
 
 	return i
 }
@@ -98,7 +115,7 @@ func (i *Himage) detail() *Himage {
 		return i
 	}
 
-	if i.Path != "" {
+	if i.path != "" {
 		i.inDetail()
 	} else if i.Multipart != nil {
 		f, err := i.Multipart.Open()
@@ -146,11 +163,12 @@ func (i *Himage) Move() *Himage {
 		return i
 	}
 
-	if i.Path != "" {
-
-	} else if i.Multipart != nil {
-
+	if i.dst == "" {
+		i.Error = errors.New("destination path is nil")
+		return i
 	}
+
+	i.moveToTemp()
 
 	if i.Error == nil {
 		i.moved = true
@@ -159,68 +177,59 @@ func (i *Himage) Move() *Himage {
 }
 
 // Resize ..
-func (i *Himage) Resize() *Himage {
-
-	return i
-}
-
-// Optimize ..
-func (i *Himage) Optimize() *Himage {
-
-	return i
-}
-
-// inDetail ..
-func (i *Himage) inDetail() *Himage {
-	f, err := os.Open(i.Path)
-	if err != nil {
-		i.Error = err
-		return i
+func (i *Himage) Resize(option Resize) *Himage {
+	if !i.moved {
+		i.Move()
 	}
-	defer f.Close()
-	stat, err := f.Stat()
-	if err != nil {
-		i.Error = err
-		return i
-	}
-	i.Detail.Size = stat.Size()
 
-	c, _, err := image.DecodeConfig(f)
-	if err != nil {
-		i.Error = err
-		return i
-	}
-	i.Detail.Width = c.Width
-	i.Detail.Height = c.Height
-
-	mime, err := mimetype.DetectReader(f)
-	if err != nil {
-		i.Error = err
-		return i
-	}
-	i.Detail.Mime = mime.String()
-
-	return i
-}
-
-func (i *Himage) makeTemp() *Himage {
 	if i.Error != nil {
 		return i
 	}
-	ext := strings.Split(i.Detail.Mime, "/")[0]
-	i.tempPath = filepath.Join(os.TempDir(), fmt.Sprintf("%s.%s", uuid.New().String(), ext))
-	_, err := os.Create(string(os.PathSeparator) + i.tempPath)
+
+	if err := option.Valid(); err != nil {
+		i.Error = err
+		return i
+	}
+
+	src, err := imaging.Open(i.tempPath)
 	if err != nil {
 		i.Error = err
 		return i
 	}
 
-	return i
-}
+	width := option.Width
+	height := option.Height
 
-func (i *Himage) moveToTemp() *Himage {
+	if option.Ratio > 0 {
+		if option.WidthOriented {
+			if option.Maximize {
+				width = option.Width + (option.Width / option.Ratio)
+			} else {
+				width = option.Width - (option.Width / option.Ratio)
+			}
+		}
+
+		if option.HeightOriented {
+			if option.Maximize {
+				width = option.Height + (option.Height / option.Ratio)
+			} else {
+				width = option.Height - (option.Height / option.Ratio)
+			}
+		}
+	}
+
+	var im *image.NRGBA
+
+	if option.Anchor > 0 {
+		im = imaging.Fill(src, width, height, imaging.Anchor(option.Anchor), imaging.Lanczos)
+	} else {
+		im = imaging.Resize(src, width, height, imaging.Lanczos)
+	}
+
+	i.save(im)
+
 	if i.Error != nil {
-		return i
+		i.resized = true
 	}
 
 	return i
@@ -229,6 +238,13 @@ func (i *Himage) moveToTemp() *Himage {
 func (i *Himage) Run() (*Himage, error) {
 	if i.tempPath != "" {
 		defer os.Remove(i.tempPath)
+	}
+
+	if i.path != "" {
+		i.Error = os.Remove(i.path)
+	} else if i.File != nil {
+		i.File.Close()
+		i.Error = os.Remove(i.File.Name())
 	}
 
 	return i, i.Error
