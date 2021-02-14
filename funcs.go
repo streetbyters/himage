@@ -97,6 +97,7 @@ func (i *Himage) inDetail() *Himage {
 	return i
 }
 
+// makeTemp ..
 func (i *Himage) makeTemp() *Himage {
 	if i.Error != nil {
 		return i
@@ -118,6 +119,7 @@ func (i *Himage) makeTemp() *Himage {
 	return i
 }
 
+// makeQuality ..
 func (i *Himage) makeQuality() *Himage {
 	i.quality = make(map[string]interface{})
 	i.quality["jpg"] = 100
@@ -129,6 +131,7 @@ func (i *Himage) makeQuality() *Himage {
 	return i
 }
 
+// moveToTemp ..
 func (i *Himage) moveToTemp() *Himage {
 	if i.tempPath == "" {
 		i.makeTemp()
@@ -146,54 +149,75 @@ func (i *Himage) moveToTemp() *Himage {
 	defer d.Close()
 
 	if i.path != "" {
-		f, err := os.Open(i.path)
-		if err != nil {
-			i.Error = err
-			return i
-		}
-		defer f.Close()
-		f.Seek(0, 0)
-		_, err = io.Copy(d, f)
-		if err != nil {
-			i.Error = err
-			return i
-		}
+		i.movePathToTemp(d)
 	} else if i.Multipart != nil {
-		f, err := i.Multipart.Open()
-		if err != nil {
-			i.Error = err
-			return i
-		}
-		f.Seek(0, 0)
-		if i.Detail.Size <= int64(CHUNK_SIZE) {
-			if err := i.bytesCopy(int64(CHUNK_SIZE), f, d); err != nil {
-				i.Error = err
-				return i
-			}
-		}
-
-		if err := i.bytesWrite(f, d); err != nil {
-			i.Error = err
-			return i
-		}
+		i.moveMultipartToTemp(d)
 	} else if i.File != nil {
-		i.File.Seek(0, 0)
-		if i.Detail.Size <= int64(CHUNK_SIZE) {
-			if err := i.bytesCopy(int64(CHUNK_SIZE), i.File, d); err != nil {
-				i.Error = err
-				return i
-			}
-		}
-
-		if err := i.bytesWrite(i.File, d); err != nil {
-			i.Error = err
-			return i
-		}
+		i.moveFileToTemp(d)
 	}
 
 	return i
 }
 
+// movePathToTemp ..
+func (i *Himage) movePathToTemp(d *os.File) *Himage {
+	f, err := os.Open(i.path)
+	if err != nil {
+		i.Error = err
+		return i
+	}
+	defer f.Close()
+	f.Seek(0, 0)
+	_, err = io.Copy(d, f)
+	if err != nil {
+		i.Error = err
+		return i
+	}
+
+	return i
+}
+
+// moveMultipartToTemp ..
+func (i *Himage) moveMultipartToTemp(d *os.File) *Himage {
+	f, err := i.Multipart.Open()
+	if err != nil {
+		i.Error = err
+		return i
+	}
+	f.Seek(0, 0)
+	if i.Detail.Size <= int64(CHUNK_SIZE) {
+		if err := i.bytesCopy(int64(CHUNK_SIZE), f, d); err != nil {
+			i.Error = err
+			return i
+		}
+	}
+
+	if err := i.bytesWrite(f, d); err != nil {
+		i.Error = err
+		return i
+	}
+
+	return i
+}
+
+func (i *Himage) moveFileToTemp(d *os.File) *Himage {
+	i.File.Seek(0, 0)
+	if i.Detail.Size <= int64(CHUNK_SIZE) {
+		if err := i.bytesCopy(int64(CHUNK_SIZE), i.File, d); err != nil {
+			i.Error = err
+			return i
+		}
+	}
+
+	if err := i.bytesWrite(i.File, d); err != nil {
+		i.Error = err
+		return i
+	}
+
+	return i
+}
+
+// bytesCopy ..
 func (i *Himage) bytesCopy(size int64, r io.Reader, w io.Writer) error {
 	buffer := make([]byte, size)
 	_, err := r.Read(buffer)
@@ -208,6 +232,7 @@ func (i *Himage) bytesCopy(size int64, r io.Reader, w io.Writer) error {
 	return nil
 }
 
+// bytesWrite ..
 func (i *Himage) bytesWrite(r io.Reader, w io.Writer) error {
 	reading := true
 	for reading {
@@ -230,6 +255,7 @@ func (i *Himage) bytesWrite(r io.Reader, w io.Writer) error {
 	return nil
 }
 
+// save ..
 func (i *Himage) save(im *image.NRGBA) {
 	os.Remove(i.tempPath)
 	switch i.Detail.Mime {
