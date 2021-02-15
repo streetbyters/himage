@@ -1,4 +1,4 @@
- <h1 align="center">Agente</h1>
+ <h1 align="center">himage</h1>
  <p align="center">
    <a href="https://circleci.com/gh/streetbyters/himage">
     <img src="https://circleci.com/gh/streetbyters/himage.svg?style=svg"/>
@@ -20,6 +20,11 @@ Basic image helpers
 
 ```shell
 go get -u github.com/streetbyters/himage
+```
+
+## Examples
+```go
+
 ```
 
 ## Thanks
