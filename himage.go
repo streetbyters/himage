@@ -174,7 +174,7 @@ func (i *Himage) Resize(option Resize) *Himage {
 }
 
 // Run ..
-func (i *Himage) Run() (*Himage, error) {
+func (i *Himage) Finish() (*Himage, error) {
 	if i.tempPath != "" {
 		defer os.Remove(i.tempPath)
 	}
