@@ -1,6 +1,6 @@
 module github.com/streetbyters/himage
 
-go 1.23.0
+go 1.25.0
 
 require (
 	github.com/disintegration/imaging v1.6.2
@@ -9,6 +9,6 @@ require (
 )
 
 require (
-	golang.org/x/image v0.24.0 // indirect
+	golang.org/x/image v0.38.0 // indirect
 	golang.org/x/net v0.38.0 // indirect
 )
